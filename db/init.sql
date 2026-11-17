@@ -1,0 +1,11 @@
+USE estacion;
+
+CREATE TABLE mediciones(
+	id		INT AUTO_INCREMENT PRIMARY KEY,
+	dia_sim		INT NOT NULL,
+	hora_sim	DECIMAL(4,2) NOT NULL,
+	temp		DECIMAL(5,2) NOT NULL,
+	hum		DECIMAL(5,2) NOT NULL,
+	creado_en	TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	INDEX idx_dia (dia_sim)
+);
