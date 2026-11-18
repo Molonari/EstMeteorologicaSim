@@ -1,0 +1,6 @@
+#versiones fijadas a la rama 2.1.* / 1.1.* 
+#asi aceptamos parches de seguridad y bugs pero no saltos de version 
+#que puedan romper la compatibilida
+
+flask==3.1.*
+pymysql==1.1.*
