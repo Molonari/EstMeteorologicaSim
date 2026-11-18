@@ -45,9 +45,17 @@ def a_json(fila):
 
 @app.get("/health")
 def health():
-    # Lo usa el healthcheck de Compose: si responde, el backend está vivo.
+    # Además de responder, verifica que puede conectarse a la base.
+    # Si no puede, devuelve 503 y el healthcheck marca el backend como
+    # unhealthy (urlopen lanza excepción ante un error HTTP).
+    try:
+        con = conectar()
+        with con.cursor() as cur:
+            cur.execute("SELECT 1")
+        con.close()
+    except Exception as error:
+        return jsonify(status="error", detalle=str(error)), 503
     return jsonify(status="ok")
-
 
 @app.post("/api/mediciones")
 def crear_medicion():
