@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Estacion meteorologica</title>
+<style>
+  body { font-family: sans-serif; margin: 20px; background: #f4f4f4; }
+  table { border-collapse: collapse; background: white; margin-bottom: 30px; }
+  th, td { border: 1px solid #ccc; padding: 4px 10px; text-align: right; }
+  th { background: #ddd; }
+</style>
+</head>
+<body>
+<h1>Estacion meteorologica simulada</h1>
+<p>Se actualiza cada 5 segundos. 3 minutos reales = 1 dia simulado.</p>
+
+<h2>Promedios por dia</h2>
+<table>
+  <thead>
+    <tr><th>Dia</th><th>Mediciones</th><th>Temp prom (C)</th><th>Temp min</th><th>Temp max</th>
+        <th>Hum prom (%)</th><th>Hum min</th><th>Hum max</th></tr>
+  </thead>
+  <tbody id="promedios"></tbody>
+</table>
+
+<h2>Ultimas mediciones</h2>
+<table>
+  <thead>
+    <tr><th>Dia</th><th>Hora</th><th>Temp (C)</th><th>Hum (%)</th></tr>
+  </thead>
+  <tbody id="mediciones"></tbody>
+</table>
+
+<script>
+// Las rutas empiezan con /api/ : NGINX las reenvia al backend (ver nginx.conf)
+
+// 14.5 -> "14:30"
+function hora(h) {
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+}
+
+async function actualizar() {
+  try {
+    const prom = await (await fetch("/api/promedios")).json();
+    document.getElementById("promedios").innerHTML = prom.map(p =>
+      `<tr><td>${p.dia_sim}</td><td>${p.mediciones}</td>
+       <td>${p.temp_prom}</td><td>${p.temp_min}</td><td>${p.temp_max}</td>
+       <td>${p.hum_prom}</td><td>${p.hum_min}</td><td>${p.hum_max}</td></tr>`
+    ).join("");
+
+    const med = await (await fetch("/api/mediciones?limit=20")).json();
+    document.getElementById("mediciones").innerHTML = med.map(m =>
+      `<tr><td>${m.dia_sim}</td><td>${hora(m.hora_sim)}</td><td>${m.temp}</td><td>${m.hum}</td></tr>`
+    ).join("");
+  } catch (e) {
+    console.log("Error al pedir datos:", e);
+  }
+}
+
+actualizar();
+setInterval(actualizar, 5000);
+</script>
+</body>
+</html>
