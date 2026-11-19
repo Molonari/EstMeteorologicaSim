@@ -13,6 +13,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+      start_period: 120s
 
   backend:
     build: ./backend
@@ -29,8 +30,6 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
-    ports:
-      - "5000:5000" #temporal para probar con curl. borrar despues
 
   simulador:
     build: ./simulador
