@@ -137,10 +137,6 @@ sudo docker compose down -v --rmi local   # borra contenedores, red, volumen db_
 - `start_period: 120s`: los fallos durante la primera inicialización no cuentan como reintentos. No agrega espera: apenas responde un ping, el servicio pasa a healthy.
 - El backend arranca recién cuando `db` está healthy (`depends_on` con `condition: service_healthy`), y el simulador y el frontend esperan al backend.
 
-**Reinicio automático**
-
-- Los 4 servicios tienen `restart: unless-stopped`: si un contenedor se cae o se reinicia el servidor, Docker lo vuelve a levantar. Un servicio detenido a mano con `stop` no se reinicia.
-
 **Seguridad de red**
 
 - `db` no publica puertos: solo es accesible desde la red interna de Compose, con el nombre `db`.
@@ -251,6 +247,13 @@ curl localhost:8080/api/promedios    # devuelve JSON del backend, pasando por NG
 ~~~
 
 **Modificar la pagina:** el `index.html` se copia dentro de la imagen, asi que despues de cambiarlo hay que reconstruir: `sudo docker compose up -d --build`.
+
+## Posibles mejoras
+
+- **Reinicio automático:** agregar `restart: unless-stopped` a los servicios para que Docker los vuelva a levantar si un contenedor se cae o si se reinicia el servidor. Hoy, después de reiniciar la VM, hay que correr `sudo docker compose up -d` a mano.
+- **Backups de la base:** hacer copias periódicas con `mysqldump` (por ejemplo con un `cron` en el host), porque el volumen `db_data` está en una sola máquina.
+- **Reloj del simulador persistente:** que al arrancar continúe desde el último `dia_sim` guardado en la base, en vez de volver al día 1.
+- **Servidor de producción para el backend:** usar `gunicorn` en lugar del servidor de desarrollo de Flask.
 
 ## Distribución de responsabilidades
 
