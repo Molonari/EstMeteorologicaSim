@@ -99,13 +99,59 @@ sudo docker compose down -v --rmi local   # borra contenedores, red, volumen db_
 
 ## Componentes
 
-### Base de datos
+### Base de datos e infraestructura (Franco)
 
-> Sección a completar por Franco.
+**Archivos**
 
-- `db/Dockerfile`: parte de `mysql:8.4` y copia `init.sql` a `/docker-entrypoint-initdb.d/`, que la imagen ejecuta solo en el primer arranque (con el volumen vacío). Si se modifica `init.sql`, hay que borrar el volumen con `down -v`.
-- `db/init.sql`: crea la tabla `mediciones` (`id`, `dia_sim`, `hora_sim`, `temp`, `hum`, `creado_en`) con un índice por `dia_sim`.
-- Healthcheck: `mysqladmin ping -h 127.0.0.1`. Con `127.0.0.1` la conexión va por TCP, así que no marca healthy durante el servidor temporal sin red que usa la imagen para ejecutar `init.sql`. `start_period: 120s` cubre la primera inicialización.
+- `db/Dockerfile`: parte de la imagen oficial `mysql:8.4` (versión fija) y copia `init.sql` a `/docker-entrypoint-initdb.d/`.
+- `db/init.sql`: crea la tabla `mediciones`. La imagen de MySQL lo ejecuta **solo en el primer arranque**, cuando el volumen está vacío. Si se modifica, hay que borrar el volumen con `sudo docker compose down -v`.
+
+**Tabla `mediciones`** (base `estacion`)
+
+| Columna | Tipo | Contenido |
+|---|---|---|
+| `id` | `INT AUTO_INCREMENT` (clave primaria) | Lo asigna MySQL |
+| `dia_sim` | `INT` | Día simulado (1, 2, 3...) |
+| `hora_sim` | `DECIMAL(4,2)` | Hora simulada, 0.00 a 23.99 (14.50 = 14:30) |
+| `temp` | `DECIMAL(5,2)` | Temperatura en °C |
+| `hum` | `DECIMAL(5,2)` | Humedad relativa en % |
+| `creado_en` | `TIMESTAMP` | Momento real de la inserción (lo completa MySQL) |
+
+- Índice `idx_dia` sobre `dia_sim`: acelera el `GROUP BY dia_sim` que usa `/api/promedios`.
+- Se usa `DECIMAL` y no `FLOAT` para guardar los valores exactos.
+
+**Usuarios y contraseñas**
+
+- Las credenciales salen del `.env`, que no se sube al repositorio (está en `.gitignore`). En el repo solo está `.env.example` como plantilla.
+- El backend usa el usuario `adminlinux`, que solo tiene permisos sobre la base `estacion`; nunca recibe la contraseña de root.
+- MySQL lee estas variables solo al inicializar un volumen vacío: para cambiar una contraseña hay que editar el `.env` y hacer `down -v` (se pierden los datos).
+
+**Persistencia**
+
+- Los datos viven en el volumen con nombre `db_data`, montado en `/var/lib/mysql`.
+- `sudo docker compose down` borra los contenedores pero conserva el volumen; `down -v` también borra el volumen.
+
+**Healthcheck y orden de arranque**
+
+- `mysqladmin ping -h 127.0.0.1` cada 5 s. Con `127.0.0.1` la conexión va por TCP, así que no da healthy durante el servidor temporal sin red que la imagen usa para ejecutar `init.sql`.
+- `start_period: 120s`: los fallos durante la primera inicialización no cuentan como reintentos. No agrega espera: apenas responde un ping, el servicio pasa a healthy.
+- El backend arranca recién cuando `db` está healthy (`depends_on` con `condition: service_healthy`), y el simulador y el frontend esperan al backend.
+
+**Reinicio automático**
+
+- Los 4 servicios tienen `restart: unless-stopped`: si un contenedor se cae o se reinicia el servidor, Docker lo vuelve a levantar. Un servicio detenido a mano con `stop` no se reinicia.
+
+**Seguridad de red**
+
+- `db` no publica puertos: solo es accesible desde la red interna de Compose, con el nombre `db`.
+
+**Verificar que funciona**
+
+~~~bash
+sudo docker compose ps                    # db en (healthy)
+sudo docker compose exec db mysql -u adminlinux -p estacion -e "DESCRIBE mediciones;"
+sudo docker compose exec db mysql -u adminlinux -p estacion -e "SELECT COUNT(*) FROM mediciones;"
+~~~
 
 ### Backend
 
