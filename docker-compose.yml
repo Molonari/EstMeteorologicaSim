@@ -32,5 +32,15 @@ services:
     ports:
       - "5000:5000" #temporal para probar con curl. borrar despues
 
+  simulador:
+    build: ./simulador
+    environment:
+      BACKEND_URL: http://backend:5000/api/mediciones
+      INTERVALO: 5
+      SEGUNDOS_POR_DIA: 180
+    depends_on:
+      backend:
+        condition: service_healthy
+
 volumes:
   db_data:
