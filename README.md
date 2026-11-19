@@ -1,100 +1,59 @@
 # Estación meteorológica simulada
 
-Trabajo Práctico Integrador — Administración de sistemas GNU/Linux y Virtualización Avanzada (UNSAM).
+TP Integrador — Administración de sistemas GNU/Linux y Virtualización Avanzada (UNSAM).
 
-Infraestructura de 4 contenedores orquestada con Docker Compose: un simulador genera mediciones de temperatura y humedad, un backend en Flask las guarda en MySQL y calcula promedios por día, y una página web servida por NGINX las muestra. El tiempo está comprimido: **3 minutos reales = 1 día simulado**.
+Un simulador genera mediciones de temperatura y humedad, un backend en Flask las guarda en MySQL y una página servida por NGINX muestra los promedios por día. Tiempo comprimido: **3 minutos reales = 1 día simulado**.
 
 ## Arquitectura
 
 ~~~
- Navegador
-    |  http://IP-DEL-SERVIDOR:8080
-    v
-+-----------+   /api/*    +-----------+   SQL    +-----------+
-| frontend  | ----------> |  backend  | -------> |    db     |
-|  NGINX    |             |  Flask    |          | MySQL 8.4 |
-+-----------+             +-----------+          +-----------+
-                               ^                       |
-               POST /api/mediciones                volumen
-                               |                   db_data
-                         +-----------+
-                         | simulador |
-                         +-----------+
+Navegador --:8080--> frontend (NGINX) --/api--> backend (Flask) --> db (MySQL 8.4)
+                                                      ^
+                                          simulador --+ (POST cada 5 s)
 ~~~
 
-| Servicio | Imagen base | Función | Puerto publicado |
-|---|---|---|---|
-| `db` | `mysql:8.4` | Guarda las mediciones (tabla `mediciones`) | — |
-| `backend` | `python:3.15-alpine` | API HTTP: recibe mediciones y calcula promedios | — |
-| `simulador` | `python:3.15-alpine` | Genera una medición cada 5 s y la envía al backend | — |
-| `frontend` | `nginx:1.30-alpine` | Sirve la página y hace de proxy de `/api/` al backend | `8080` |
+| Servicio | Imagen base | Puerto publicado |
+|---|---|---|
+| `db` | [`mysql:8.4`](https://hub.docker.com/_/mysql) | — |
+| `backend` | [`python:3.15-alpine`](https://hub.docker.com/_/python) | — |
+| `simulador` | [`python:3.15-alpine`](https://hub.docker.com/_/python) | — |
+| `frontend` | [`nginx:1.30-alpine`](https://hub.docker.com/_/nginx) | `8080` |
 
-- Todos los servicios están en la red interna que crea Compose y se encuentran por nombre (`db`, `backend`).
-- Solo el frontend publica un puerto al host. La base y el backend no son accesibles desde afuera.
-- Orden de arranque (`depends_on` con `condition: service_healthy`): `db` → `backend` → `simulador` y `frontend`.
-- Los datos de MySQL persisten en el volumen con nombre `db_data`.
-
-Imágenes oficiales utilizadas:
-
-- MySQL: <https://hub.docker.com/_/mysql>
-- Python: <https://hub.docker.com/_/python>
-- NGINX: <https://hub.docker.com/_/nginx>
+Los servicios se comunican por nombre en la red interna de Compose. Solo el frontend se expone al host. Los datos persisten en el volumen `db_data`.
 
 ## Requisitos
 
-- Linux con Docker Engine y el plugin Docker Compose (probado con Docker 29.x y Compose v5.x sobre Ubuntu 26.04).
-- Git y acceso a internet para descargar las imágenes la primera vez.
-- Puerto `8080` libre en el host.
-
-Los comandos usan `sudo` porque el usuario no pertenece al grupo `docker` (pertenecer a ese grupo equivale a tener acceso root).
+- [Docker Engine](https://docs.docker.com/engine/install/) con el plugin Compose.
+- Git.
 
 ## Puesta en marcha
 
 ~~~bash
 git clone https://github.com/Molonari/TPFINALLINUX.git
 cd TPFINALLINUX
-cp .env.example .env
-nano .env                       # reemplazar los valores "cambiar" por contraseñas propias
+cp .env.example .env      # editar y reemplazar las contraseñas "cambiar"
 sudo docker compose up -d --build
-sudo docker compose ps
 ~~~
 
-Variables del `.env` (el archivo real no se sube al repositorio):
-
-| Variable | Uso |
-|---|---|
-| `MYSQL_ROOT_PASSWORD` | Contraseña de root de MySQL (solo administración) |
-| `MYSQL_DATABASE` | Base que se crea al iniciar (`estacion`) |
-| `MYSQL_USER` | Usuario de la aplicación (`adminlinux`) |
-| `MYSQL_PASSWORD` | Contraseña de ese usuario (la usa el backend) |
-
-**El primer arranque tarda 2 a 3 minutos:** MySQL inicializa la base desde cero. Repetir `sudo docker compose ps` hasta ver `db` y `backend` en `(healthy)`. Los arranques siguientes tardan segundos.
+> El primer arranque tarda 2 o 3 minutos mientras MySQL se inicializa. Esperar a que `sudo docker compose ps` muestre `db` y `backend` como `healthy`.
 
 ## Acceso
 
-- Página: <http://localhost:8080> desde el servidor, o `http://IP-DEL-SERVIDOR:8080` desde otra PC de la red (la IP se ve con `ip a`).
-- API (a través del proxy): `http://IP-DEL-SERVIDOR:8080/api/promedios` y `/api/mediciones?limit=N`.
+<http://localhost:8080> (o `http://IP-DEL-SERVIDOR:8080` desde otra PC de la red).
 
 ## Pruebas
 
 ~~~bash
-sudo docker compose ps                              # 4 servicios arriba; db y backend (healthy)
-curl http://localhost:8080/api/promedios            # JSON con promedios por día (pasa por NGINX)
-curl http://localhost:5000/health                   # debe FALLAR: el backend no está expuesto
-sudo docker compose logs -f simulador               # líneas "OK 201 {...}"
-sudo docker compose exec db mysql -u adminlinux -p estacion -e "SELECT COUNT(*) FROM mediciones;"
+sudo docker compose ps                         # 4 servicios arriba
+curl http://localhost:8080/api/promedios       # JSON con promedios por día
+sudo docker compose logs -f simulador          # líneas "OK 201"
 ~~~
 
-## Detención
+## Detención y limpieza
 
 ~~~bash
-sudo docker compose down        # baja los contenedores; los datos del volumen se conservan
-~~~
-
-## Limpieza
-
-~~~bash
-sudo docker compose down -v --rmi local   # borra contenedores, red, volumen db_data e imágenes construidas
+sudo docker compose down          # detiene y conserva los datos
+sudo docker compose down -v       # además borra el volumen (base vacía)
 ~~~
 
 ## Componentes
@@ -149,20 +108,17 @@ sudo docker compose exec db mysql -u adminlinux -p estacion -e "DESCRIBE medicio
 sudo docker compose exec db mysql -u adminlinux -p estacion -e "SELECT COUNT(*) FROM mediciones;"
 ~~~
 
-### Backend
+### Backend (Martín)
 
-- `backend/app.py`: API en Flask, escucha en `0.0.0.0:5000`. Se conecta a MySQL con el host `db` y el usuario de la aplicación (no recibe la contraseña de root).
+API en Flask (`backend/app.py`), escucha en el puerto 5000 dentro de la red de Compose.
 
 | Endpoint | Función |
 |---|---|
-| `GET /health` | Hace `SELECT 1` contra la base: 200 si conecta, 503 si no. Lo usa el healthcheck |
-| `POST /api/mediciones` | Guarda una medición `{"dia_sim", "hora_sim", "temp", "hum"}`; 400 si faltan campos |
-| `GET /api/mediciones?limit=N` | Últimas N mediciones (por defecto 20, máximo 500) |
-| `GET /api/promedios` | Promedio, mínimo y máximo de temperatura y humedad por día simulado |
+| `POST /api/mediciones` | Guarda una medición |
+| `GET /api/mediciones?limit=N` | Últimas N mediciones |
+| `GET /api/promedios` | Promedio, mínimo y máximo por día simulado |
+| `GET /health` | Verifica la conexión con la base (lo usa el healthcheck) |
 
-- `backend/requirements.txt`: `flask`, `pymysql` y `cryptography` (necesaria para autenticarse contra MySQL 8.4 con `caching_sha2_password`), con versiones fijadas.
-- `backend/Dockerfile`: parte de `python:3.15-alpine`; copia `requirements.txt` e instala dependencias antes de copiar `app.py`, para aprovechar la caché de capas.
-  
 ## Simulador (Lautaro)
 
 Genera mediciones falsas de temperatura y humedad y las manda al backend por HTTP, como si fuera un sensor real.
